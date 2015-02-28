@@ -16,6 +16,8 @@
 
     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
 */
+ 
+ 
 #include "clang/Driver/Options.h"
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTContext.h"
@@ -28,8 +30,9 @@
 #include "clang/Tooling/Tooling.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/Support/Signals.h"
-#include <iostream>
-#include <vector>
+#include "config.cpp"
+#include "llvm/Support/Regex.h"
+
 using namespace std;
 using namespace clang;
 using namespace clang::driver;
@@ -45,6 +48,7 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
     private:
 
         ASTContext *astContext; // used for getting additional AST info
+        Regex rec;
 
         bool isInMainFile(const SourceLocation& s) const
         {
@@ -54,8 +58,8 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
 
 
     public:
-
-        explicit ExampleVisitor(CompilerInstance *CI): astContext(&(CI->getASTContext())) // initialize private members
+		
+        explicit ExampleVisitor(CompilerInstance *CI): astContext(&(CI->getASTContext())),rec("\\$cond")  // initialize private members
         {
             rewriter.setSourceMgr(astContext->getSourceManager(), astContext->getLangOpts());
         }
@@ -78,6 +82,7 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
 
         virtual bool VisitIfStmt(IfStmt* ifst)
         {
+           using namespace logConfig;
            if(!isInMainFile(ifst->getLocStart()))
                return true ;
 
@@ -133,24 +138,30 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
                  ifsl=ifsl.getLocWithOffset(1);
            }
 
-           //string ifsstr,ifestr;
-
+          
+           string ifstrb(rec.sub(cond,IfLogIn));
+           string ifstre(rec.sub(cond,IfLogOut));
+           
            if(brackIf)
            {
                errs()<<"inside brack if\n";
-               rewriter.ReplaceText(ifst->getThen()->getLocStart(),"{//Inside if body with condition "+cond+"\n");
-               rewriter.ReplaceText(ifst->getThen()->getLocEnd(),"//Exiting if body with condition "+cond+"\n}");
+               rewriter.ReplaceText(ifst->getThen()->getLocStart(),"{"+ifstrb+"\n");
+               rewriter.ReplaceText(ifst->getThen()->getLocEnd(),ifstre+"\n}");
            }
            else
            {
                errs()<<"inside non brack if\n";
-               rewriter.InsertText(ifst->getThen()->getLocStart(),"{//Inside if body with condition "+cond+"\n");
-               rewriter.InsertText(thene,"//Exiting if body with condition "+cond+"\n}");
+               rewriter.InsertText(ifst->getThen()->getLocStart(),"{"+ifstrb+"\n");
+               rewriter.InsertText(thene,ifstre+"\n}");
            }
 
 
            //The if part is over . Let us play with else part . Every thing will be same over here .
            //I should write some better code instead of repeating patterns . But you know .
+
+
+
+			
 
 
            Stmt* estmt = ifst->getElse();
@@ -159,9 +170,9 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
 
            SourceLocation elsl=estmt->getLocStart();
            bool brackEsl=false;
+           
            while(1)//loop to detect whether else is bracketed
            {
-
                 const char *csp=rewriter.getSourceMgr().getCharacterData(elsl);
 
                 if(*csp==';')
@@ -184,18 +195,20 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
            }
 
 
+		   string estrb(rec.sub(cond,ElseLogIn));
+		   string estre(rec.sub(cond,ElseLogOut));
 
            if(brackEsl)
            {
                errs()<<"inside brack if\n";
-               rewriter.ReplaceText(estmt->getLocStart(),"{//Inside else body with condition "+cond+"\n");
-               rewriter.ReplaceText(estmt->getLocEnd(),"//Exiting else body with condition "+cond+"\n}");
+               rewriter.ReplaceText(estmt->getLocStart(), "{"+estrb+"\n");
+               rewriter.ReplaceText(estmt->getLocEnd(),estre+"\n}");
                return true;
            }
            else
            {
-               rewriter.InsertText(estmt->getLocStart(),"{//Inside else with condition "+cond+"\n");
-               rewriter.InsertText(elsle,"//Exiting else with condition"+cond+"\n} ");
+               rewriter.InsertText(estmt->getLocStart(),"{"+estrb+"\n");
+               rewriter.InsertText(elsle,estre+"\n} ");
                return true;
            }
 
@@ -206,7 +219,9 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
         {
             if(!isInMainFile(wstmt->getLocStart()))
                return true ;
-
+			using namespace logConfig;
+			
+			
            /*SourceRange vdcl= ifst->getConditionVariableDeclStmt()->getSourceRange();
            SourceLocation vbeg(vdcl.getBegin());
            SourceLocation vend(vdcl.getEnd());
@@ -263,16 +278,18 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
            }
            //string ifsstr,ifestr;
            //rewriter.InsertText(wstmt->getBody()->getLocStart(),"^");
+           string wstrb(rec.sub(cond,WhileLog));
+			//string wstre(rec.sub(cond,ElseLogOut));
            if(brackWhile)
            {
                errs()<<"inside brack while\n";
-               rewriter.ReplaceText(wstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
-               rewriter.ReplaceText(wstmt->getBody()->getLocEnd(),"//Exiting if body with condition "+cond+"\n}");
+               rewriter.ReplaceText(wstmt->getBody()->getLocStart(),"{"+wstrb+"\n");
+               //rewriter.ReplaceText(wstmt->getBody()->getLocEnd(),"//Exiting if body with condition "+cond+"\n}");
            }
            else
            {
                errs()<<"inside non brack while\n";
-               rewriter.InsertText(wstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
+               rewriter.InsertText(wstmt->getBody()->getLocStart(),"{"+wstrb+"\n");
                rewriter.InsertText(wesl,"//Exiting while body with condition "+cond+"\n}");
            }
            return true;
@@ -280,8 +297,11 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
 
         bool VisitForStmt(ForStmt* fstmt)
         {
+			using namespace logConfig;
             if(!isInMainFile(fstmt->getLocStart()))
                return true ;
+
+			
 
            /*SourceRange vdcl= ifst->getConditionVariableDeclStmt()->getSourceRange();
            SourceLocation vbeg(vdcl.getBegin());
@@ -309,7 +329,7 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
                sc=sc.getLocWithOffset(1);
            }
 
-
+		   
 
            SourceLocation fsl=fstmt->getBody()->getLocStart();
            bool brackWhile=false;
@@ -339,28 +359,30 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
            }
            //string ifsstr,ifestr;
            //rewriter.InsertText(wstmt->getBody()->getLocStart(),"^");
+           string fstrb(rec.sub(cond,ForLog));
+		   //string estre(rec.sub(cond,ElseLogOut));
            if(brackWhile)
            {
                errs()<<"inside brack for\n";
-               rewriter.ReplaceText(fstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
-               rewriter.ReplaceText(fstmt->getBody()->getLocEnd(),"//Exiting if body with condition "+cond+"\n}");
+               rewriter.ReplaceText(fstmt->getBody()->getLocStart(),"{"+fstrb+"\n");
+               rewriter.ReplaceText(fstmt->getBody()->getLocEnd(),"//Exiting for body with condition "+cond+"\n}");
            }
            else
            {
                errs()<<"inside non brack for\n";
-               rewriter.InsertText(fstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
-               rewriter.InsertText(fesl,"//Exiting while body with condition "+cond+"\n}");
+               rewriter.InsertText(fstmt->getBody()->getLocStart(),"{"+fstrb+"\n");
+               rewriter.InsertText(fesl,"//Exiting for body with condition "+cond+"\n}");
            }
            return true;
         }
 
         virtual bool VisitDoStmt(DoStmt* wstmt)
         {
+			using namespace logConfig;
             if(!isInMainFile(wstmt->getLocStart()))
                return true ;
 
-
-
+		  
            SourceLocation sc=wstmt->getCond()->getExprLoc();
            string cond;
            while(1)//exraction condition as string
@@ -371,6 +393,7 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
                cond+=*csp;
                sc=sc.getLocWithOffset(1);
            }
+
 
 
 
@@ -402,16 +425,21 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
            }
            //string ifsstr,ifestr;
            //rewriter.InsertText(wstmt->getBody()->getLocStart(),"^");
+
+			string wstrb(rec.sub(cond,DoWhileLog));
+		   //string estre(rec.sub(cond,ElseLogOut));
+
+
            if(brackWhile)
            {
                errs()<<"inside brack while\n";
-               rewriter.ReplaceText(wstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
-               rewriter.ReplaceText(wstmt->getBody()->getLocEnd(),"//Exiting if body with condition "+cond+"\n}");
+               rewriter.ReplaceText(wstmt->getBody()->getLocStart(),"{"+wstrb+"\n");
+               rewriter.ReplaceText(wstmt->getBody()->getLocEnd(),"//Exiting while body with condition "+cond+"\n}");
            }
            else
            {
                errs()<<"inside non brack while\n";
-               rewriter.InsertText(wstmt->getBody()->getLocStart(),"{//Inside while body with condition "+cond+"\n");
+               rewriter.InsertText(wstmt->getBody()->getLocStart(),"{"+wstrb+"\n");
                rewriter.InsertText(wesl,"//Exiting while body with condition "+cond+"\n}");
            }
            return true;
@@ -421,8 +449,11 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
 
         bool VisitSwitchStmt(SwitchStmt* st)
         {
+			using namespace logConfig;
             if(!isInMainFile(st->getLocStart()))
                return true ;
+               
+           
 
            /*SourceRange vdcl= ifst->getConditionVariableDeclStmt()->getSourceRange();
            SourceLocation vbeg(vdcl.getBegin());
@@ -450,16 +481,20 @@ class ExampleVisitor : public RecursiveASTVisitor<ExampleVisitor> {
                sc=sc.getLocWithOffset(1);
            }
 
+           string strb(rec.sub(cond,ElseLogIn));
+			//string estre(rec.sub(cond,ElseLogOut));
+
            SwitchCase* first=st->getSwitchCaseList();
            while(first)
            {
                 SourceLocation s= first->getColonLoc().getLocWithOffset(1);
-                rewriter.InsertText(s,"//Inside switch statement condition:"+cond+";\n");
+                rewriter.InsertText(s,strb+";\n");
                 first=first->getNextSwitchCase();
            }
             return true;
         }
 
+		
 };
 
 
@@ -514,12 +549,14 @@ int main(int argc, const char **argv) {
     // create a new Clang Tool instance (a LibTooling environment)
     ClangTool Tool(op.getCompilations(), op.getSourcePathList());
 
+    //Load the configuration file
+    logConfig::LoadLog();
     // run the Clang Tool, creating a new FrontendAction (explained below)
     int result = Tool.run(newFrontendActionFactory<ExampleFrontendAction>().get());
 
     errs() << "\nFound " << numFunctions << " functions.\n\n";
     // print out the rewritten source code ("rewriter" is a global var.)
     rewriter.getEditBuffer(rewriter.getSourceMgr().getMainFileID()).write(errs());
-    
+
     return result;
 }
